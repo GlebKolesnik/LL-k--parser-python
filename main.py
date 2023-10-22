@@ -526,9 +526,17 @@ def main():
     print("Grammar is for simple arithmetic expressions: E -> T + E | T - E | T, T -> F * T | F / T | F, F -> (E) | id")
 
     # Recursive Descent Parsing
+    # В функции main после Recursive Descent Parsing
     parser = RecursiveDescentParserWithAST(input_string)
-    success, _ = parser.parse()
+    success, ast = parser.parse()
     print(f"Recursive Descent Parsing of '{input_string}': {'Success' if success else 'Failure'}")
+
+    # Добавим визуализацию дерева разбора в случае успеха
+    if success:
+        pos = nx.spring_layout(ast)
+        labels = {node: ast.nodes[node]['label'] for node in ast.nodes()}
+        nx.draw(ast, pos, labels=labels, with_labels=True, node_size=3000, node_color="skyblue", font_size=15)
+        plt.show()
 
     return success
 
