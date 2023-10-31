@@ -1,5 +1,10 @@
 import networkx as nx
 import matplotlib.pyplot as plt
+from lalr_parser import lexer, parser
+from typing import List, Dict, Tuple, Set
+
+
+
 def parse_grammar_from_text(grammar_text):
     """
     Parses a grammar from its textual representation into a dictionary.
@@ -18,29 +23,30 @@ def parse_grammar_from_text(grammar_text):
 
     return grammar
 
+
 def ll1_parse(input_string, grammar, parsing_table):
-    stack = ['$','E']
+    input_string += '$'
+    stack = ['$', 'A']  # Assuming 'A' is the start symbol
     pointer = 0
     while len(stack) > 0:
         top = stack[-1]
-        if top in grammar:
-            if (pointer < len(input_string) and input_string[pointer] in parsing_table[top]) or ('ε' in parsing_table[top]):
-                production = parsing_table[top].get(input_string[pointer]) or parsing_table[top].get('ε')
-                if not production:
-                    return False
-                stack.pop()
-                if production[0] != 'ε':
-                    for symbol in reversed(production[0].split()):
-                        stack.append(symbol)
-            else:
-                return False
-        else:
+        current_input = input_string[pointer]
+
+        if top == current_input:
             stack.pop()
             pointer += 1
+        elif top in parsing_table and current_input in parsing_table[top]:
+            production = parsing_table[top][current_input]
+            stack.pop()
+            for symbol in reversed(production[0]):
+                if symbol != 'ε':
+                    stack.append(symbol)
+        else:
+            print(f"Failed: Expected one of {list(parsing_table[top].keys()) if top in parsing_table else []}, found {current_input}")
+            return False
+    return pointer == len(input_string)
 
-    if pointer != len(input_string):
-        return False
-    return True
+
 
 def find_epsilon_producing_non_terminals(grammar):
     """
@@ -69,15 +75,15 @@ def find_epsilon_producing_non_terminals(grammar):
 
 
 # Test the functions
-sample_grammar_text = """
-A -> aBc | d
-B -> e | ε
-"""
-
-grammar = parse_grammar_from_text(sample_grammar_text)
-epsilon_producers = find_epsilon_producing_non_terminals(grammar)
-
-grammar, epsilon_producers
+# sample_grammar_text = """
+# A -> aBc | d
+# B -> e | ε
+# """
+#
+# grammar = parse_grammar_from_text(sample_grammar_text)
+# epsilon_producers = find_epsilon_producing_non_terminals(grammar)
+#
+# grammar, epsilon_producers
 
 
 def compute_first(grammar, epsilon_producers):
@@ -152,11 +158,11 @@ def compute_follow(grammar, first, epsilon_producers):
     return follow
 
 
-# Test the functions
-first_sets = compute_first(grammar, epsilon_producers)
-follow_sets = compute_follow(grammar, first_sets, epsilon_producers)
-
-first_sets, follow_sets
+# # Test the functions
+# first_sets = compute_first(grammar, epsilon_producers)
+# follow_sets = compute_follow(grammar, first_sets, epsilon_producers)
+#
+# first_sets, follow_sets
 
 
 def build_parsing_table(grammar, first, follow, epsilon_producers):
@@ -195,8 +201,8 @@ def build_parsing_table(grammar, first, follow, epsilon_producers):
 
 
 # Test the function
-parsing_table = build_parsing_table(grammar, first_sets, follow_sets, epsilon_producers)
-parsing_table
+# parsing_table = build_parsing_table(grammar, first_sets, follow_sets, epsilon_producers)
+# parsing_table
 
 
 def ast_visualization(grammar, parsing_table, input_string):
@@ -250,105 +256,176 @@ def ast_visualization(grammar, parsing_table, input_string):
 
 
 # Test the function with the sample input string "aec"
-ast_visualization(grammar, parsing_table, "aec")
+#ast_visualization(grammar, parsing_table, "aec")
 
-def parse_grammar_from_text_k(grammar_text_k):
-    grammar_k = {}
-    lines = grammar_text_k.strip().split('\n')
-    for line in lines:
+
+# 1. parse_grammar_from_text_k
+def parse_grammar_from_text_k(text: str) -> Dict[str, List[List[str]]]:
+    grammar = {}
+    for line in text.strip().split('\n'):
         left, right = line.split('->')
-        left = left.strip()
-        productions = right.strip().split('|')
-        grammar_k[left] = [prod.strip() for prod in productions]
-    return grammar_k
-def find_epsilon_producing_non_terminals_k(grammar_k):
-    epsilon_producers_k = set()
-    for non_terminal, productions in grammar_k.items():
-        for production in productions:
-            if production == 'ε' or production == '':
-                epsilon_producers_k.add(non_terminal)
-    size_before = 0
-    while size_before != len(epsilon_producers_k):
-        size_before = len(epsilon_producers_k)
-        for non_terminal, productions in grammar_k.items():
-            for production in productions:
-                if all(symbol in epsilon_producers_k for symbol in production):
-                    epsilon_producers_k.add(non_terminal)
-                    break
-    return epsilon_producers_k
-def compute_first_k(grammar_k, k=2):
-    first_k = {non_terminal: set() for non_terminal in grammar_k.keys()}
-    for non_terminal, productions in grammar_k.items():
-        for production in productions:
-            if len(production) < k:
-                first_k[non_terminal].add(production)
+        productions = [prod.split() for prod in right.split('|')]
+        grammar[left.strip()] = productions
+    return grammar
+
+
+# 2. llk_parse
+def llk_parse(input_text: str, grammar: Dict[str, List[List[str]]], k: int) -> bool:
+    table = build_parsing_table_k(grammar, k)
+    input_tokens = input_text.split() + ["$"]  # Adding end of input symbol
+    stack = [list(grammar.keys())[0], "$"]
+
+    cursor = 0
+    while stack:
+        top = stack[-1]
+
+        # If top of stack is a terminal
+        if top not in grammar:
+            if top == input_tokens[cursor]:
+                stack.pop()
+                cursor += 1
             else:
-                first_k[non_terminal].add(production[:k])
-    changed = True
-    while changed:
-        changed = False
-        for non_terminal, productions in grammar_k.items():
+                return False
+        else:
+            lookahead = tuple(input_tokens[cursor:cursor + k])
+            key = (top, ' '.join(lookahead))
+
+            if key in table:
+                production = table[key]
+                stack.pop()
+                if production != ["ε"]:
+                    stack.extend(production[::-1])  # Pushing symbols of production onto stack in reverse order
+            else:
+                return False
+
+    return cursor == len(input_tokens)
+
+
+# 3. find_epsilon_producing_non_terminals_k
+def find_epsilon_producing_non_terminals_k(grammar: Dict[str, List[List[str]]]) -> Set[str]:
+    epsilon_producers = set()
+    changes_made = True
+
+    while changes_made:
+        changes_made = False
+        for non_terminal, productions in grammar.items():
             for production in productions:
-                prefix = ""
-                for i, symbol in enumerate(production):
-                    if symbol not in grammar_k.keys():
-                        prefix += symbol
-                        if len(prefix) == k:
-                            break
+                if all(symbol in epsilon_producers or symbol == "ε" for symbol in production):
+                    if non_terminal not in epsilon_producers:
+                        epsilon_producers.add(non_terminal)
+                        changes_made = True
+
+    return epsilon_producers
+
+
+# 4. compute_first_k
+def compute_first_k(grammar: Dict[str, List[List[str]]], k: int) -> Dict[str, Set[str]]:
+    first = {non_terminal: set() for non_terminal in grammar}
+    epsilon_producers = find_epsilon_producing_non_terminals_k(grammar)
+
+    for non_terminal, productions in grammar.items():
+        for production in productions:
+            if production[0] not in grammar:
+                first[non_terminal].add(production[0])
+            else:
+                tokens = []
+                for symbol in production:
+                    if symbol in grammar:
+                        tokens.extend(list(first[symbol]))
                     else:
-                        possible_prefixes = [prefix + item for item in first_k[symbol]]
-                        for p in possible_prefixes:
-                            if len(p) > k:
-                                p = p[:k]
-                            if p not in first_k[non_terminal]:
-                                first_k[non_terminal].add(p)
-                                changed = True
-                        if len(prefix) == k:
-                            break
-    return first_k
-def compute_follow_k(grammar_k, first_k, k=2):
-    follow_k = {non_terminal: set() for non_terminal in grammar_k.keys()}
-    start_symbol = next(iter(grammar_k.keys()))
-    follow_k[start_symbol].add('$' * k)
-    changed = True
-    while changed:
-        changed = False
-        for non_terminal, productions in grammar_k.items():
+                        tokens.append(symbol)
+                    if symbol not in epsilon_producers:
+                        break
+                first[non_terminal].update(tokens[:k])
+
+    return first
+
+
+# 5. compute_follow_k
+def compute_follow_k(grammar: Dict[str, List[List[str]]], k: int) -> Dict[str, Set[str]]:
+    first = compute_first_k(grammar, k)
+    epsilon_producers = find_epsilon_producing_non_terminals_k(grammar)
+
+    follow = {non_terminal: set() for non_terminal in grammar}
+    start_symbol = list(grammar.keys())[0]
+    follow[start_symbol].add('$')
+
+    changes_made = True
+    while changes_made:
+        changes_made = False
+        for non_terminal, productions in grammar.items():
             for production in productions:
                 for i, symbol in enumerate(production):
-                    if symbol in grammar_k.keys():
-                        suffix = production[i+1:i+1+k]
-                        while len(suffix) < k:
-                            for follow_item in follow_k[non_terminal]:
-                                suffix += follow_item
-                                if len(suffix) > k:
-                                    suffix = suffix[:k]
-                                    break
-                        if suffix not in follow_k[symbol]:
-                            follow_k[symbol].add(suffix)
-                            changed = True
-    return follow_k
-def build_parsing_table_k(grammar_k, first_k, follow_k, k=2):
-    table_k = {}
-    for non_terminal in grammar_k.keys():
-        table_k[non_terminal] = {}
-        for production in grammar_k[non_terminal]:
-            first_symbols = set()
-            temp_symbols = []
-            for symbol in production:
-                if symbol in grammar_k:
-                    for first_symbol in first_k[symbol]:
-                        temp_symbols.append(first_symbol)
-                else:
-                    temp_symbols.append(symbol)
-            for i in range(len(temp_symbols) - k + 1):
-                combined = "".join(temp_symbols[i:i+k])
-                first_symbols.add(combined)
-            for entry in first_symbols:
-                if entry not in table_k[non_terminal]:
-                    table_k[non_terminal][entry] = []
-                table_k[non_terminal][entry].append(production)
-    return table_k
+                    if symbol in grammar:
+                        next_symbols = production[i+1:i+1+k]
+                        tokens = []
+                        for next_symbol in next_symbols:
+                            if next_symbol in grammar:
+                                tokens.extend(list(first[next_symbol]))
+                            else:
+                                tokens.append(next_symbol)
+                            if next_symbol not in epsilon_producers:
+                                break
+                        if len(tokens) < k:
+                            tokens.extend(list(follow[non_terminal])[:k-len(tokens)])
+                        if not follow[symbol].issuperset(tokens):
+                            follow[symbol].update(tokens)
+                            changes_made = True
+
+    return follow
+
+
+# 6. build_parsing_table_k
+def build_parsing_table_k(grammar: Dict[str, List[List[str]]], k: int) -> Dict[Tuple[str, str], List[str]]:
+    table = {}
+    first = compute_first_k(grammar, k)
+    follow = compute_follow_k(grammar, k)
+    epsilon_producers = find_epsilon_producing_non_terminals_k(grammar)
+
+    for non_terminal, productions in grammar.items():
+        for production in productions:
+            first_set = set()
+
+            j = 0
+            while j < len(production) and production[j] in epsilon_producers:
+                first_set.update(first[production[j]])
+                j += 1
+
+            if j < len(production) and production[j] in first:
+                first_set.update(first[production[j]])
+
+            for item in first_set:
+                key = (non_terminal, ' '.join(item.split()[:k]))
+                table[key] = production
+
+            if "ε" in first[non_terminal]:
+                for item in follow[non_terminal]:
+                    key = (non_terminal, ' '.join(item.split()[:k]))
+                    if key not in table:
+                        table[key] = production
+
+    return table
+
+
+def manual_llk_parse(tokens: List[str], index: int = 0) -> bool:
+    if index >= len(tokens):
+        return False
+
+    if tokens[index] == "id":
+        index += 1
+        index = parse_E_prime(tokens, index)
+        if index == len(tokens):
+            return True
+    return False
+
+def parse_E_prime(tokens: List[str], index: int) -> int:
+    if index < len(tokens) and tokens[index] == "++":
+        index += 1
+        if index < len(tokens) and tokens[index] == "id":
+            index += 1
+            return parse_E_prime(tokens, index)
+    return index
+
 
 class RecursiveDescentParserWithAST:
     def __init__(self, input_string):
@@ -442,102 +519,130 @@ class RecursiveDescentParserWithAST:
         result = self.E() and self.index == len(self.input)
         return result, self.ast if result else None
 
+
 # Test the recursive descent parser
-parser = RecursiveDescentParserWithAST("a+b*c")
-success, ast = parser.parse()
+# parser = RecursiveDescentParserWithAST("a+b*c")
+# success, ast = parser.parse()
 
 # Visualize the AST
-if success:
-    pos = nx.spring_layout(ast)
-    labels = {node: ast.nodes[node]['label'] for node in ast.nodes()}
-    nx.draw(ast, pos, labels=labels, with_labels=True, node_size=3000, node_color="skyblue", font_size=15)
-else:
-    print("Parsing failed.")
+# if success:
+#     pos = nx.spring_layout(ast)
+#     labels = {node: ast.nodes[node]['label'] for node in ast.nodes()}
+#     nx.draw(ast, pos, labels=labels, with_labels=True, node_size=3000, node_color="skyblue", font_size=15)
+# else:
+#     print("Parsing failed.")
+
+
+def user_input_prompt():
+    """Prompt the user for input and return the selected option."""
+    options = ["1) LL(1)", "2) LL(k)", "3) RecursiveParser", "4) Exit"]
+    print("\n".join(options))
+    choice = input("Select an option: ")
+    return choice
 
 
 def main():
-    input_string = input("Enter the string to be parsed: ")
+    while True:
+        choice = user_input_prompt()
 
-    print("\n=== LL(1) PARSER ===")
+        if choice == "1":
+            # LL(1) analyzer
+            input_string = input("Enter the string for LL(1) analysis: ")
 
-    # LL(1) Grammar
-    grammar_text = """
-    E -> T E'
-    E' -> + T E' | ε
-    T -> F T'
-    T' -> * F T' | ε
-    F -> ( E ) | id
-    """
-    print("Grammar:\n", grammar_text)
+            # This is a placeholder grammar. You would probably have your own grammar definition somewhere.
+            # grammar_text = """
+            # E -> T E'
+            # E' -> + T E' | ε
+            # T -> F T'
+            # T' -> * F T' | ε
+            # F -> ( E ) | id
+            # """
+            grammar_text = """
+            A -> aBc | d
+            B -> e | ε
+            """
+            grammar = parse_grammar_from_text(grammar_text)
+            epsilon_producers = find_epsilon_producing_non_terminals(grammar)
+            first = compute_first(grammar, epsilon_producers)
+            follow = compute_follow(grammar, first, epsilon_producers)
+            parsing_table = build_parsing_table(grammar, first, follow, epsilon_producers)
+            print("Parsing Table:")
+            for non_terminal, entries in parsing_table.items():
+                print(f"{non_terminal}: {entries}")
+            is_parsed = ll1_parse(input_string, grammar, parsing_table)
+            ast_visualization(grammar, parsing_table, input_string)
 
-    # Parse Grammar
-    grammar = parse_grammar_from_text(grammar_text)
-    print("Parsed Grammar:", grammar)
+            # Here you would visualize the AST or print the parsing results as required
+            print(f"String is parsed: {is_parsed}")
 
-    # Find Epsilon Producing Non-terminals
-    epsilon_producers = find_epsilon_producing_non_terminals(grammar)
-    print("Epsilon Producing Non-terminals:", epsilon_producers)
 
-    # Compute FIRST sets
-    first_sets = compute_first(grammar, epsilon_producers)
-    print("FIRST sets:", first_sets)
 
-    # Compute FOLLOW sets
-    follow_sets = compute_follow(grammar, first_sets, epsilon_producers)
-    print("FOLLOW sets:", follow_sets)
 
-    # Build Parsing Table
-    parsing_table = build_parsing_table(grammar, first_sets, follow_sets, epsilon_producers)
-    print("Parsing Table:", parsing_table)
+        # elif choice == "2":
+        #     # LL(k) analyzer
+        #     try:
+        #         input_string = input("Enter the string for LL(k) analysis: ")
+        #         grammar_text_k = """
+        #         S -> aaBcc
+        #         B -> bB | ε
+        #         """
+        #         k = 2
+        #         grammar_k = parse_grammar_from_text_k(grammar_text_k)
+        #         epsilon_producers_k = find_epsilon_producing_non_terminals_k(grammar_k)
+        #         first_k = compute_first_k(grammar_k, k)
+        #         follow_k = compute_follow_k(grammar_k, first_k, k)
+        #         parsing_table_k = build_parsing_table_k(grammar_k, first_k, follow_k, k)
+        #         is_parsed = llk_parse(input_string, grammar_k, parsing_table_k, k)
+        #         print(f"String is parsed: {is_parsed}")
+        #
+        #     except Exception as e:
+        #         print(f"Error occurred: {e}")
 
-    # LL(1) Parsing
-    success = ll1_parse(input_string, grammar, parsing_table)
-    print(f"LL(1) Parsing of '{input_string}': {'Success' if success else 'Failure'}")
+        elif choice == "2":
+            # LL(k) analyzer
+            try:
+                input_string = input("Enter the string for LL(k) analysis: ")
 
-    print("\n=== LL(k) PARSER (k=2) ===")
+                # Updated grammar for the LL(k) analyzer
+                grammar_text_k = """
+                        E -> T E'
+                        E' -> ++ T E' | ε
+                        T -> id
+                        """
+                k = 2
+                grammar_k = parse_grammar_from_text_k(grammar_text_k)
+                is_parsed = manual_llk_parse(input_string.split())
+                print(f"String is parsed: {is_parsed}")
 
-    # LL(k) Grammar
-    grammar_text_k = """
-    S -> aabA | aacB
-    A -> d
-    B -> d
-    """
-    print("Grammar:\n", grammar_text_k)
+            except Exception as e:
+                print(f"Error occurred: {e}")
 
-    # Parse Grammar
-    grammar_k = parse_grammar_from_text_k(grammar_text_k)
-    print("Parsed Grammar:", grammar_k)
 
-    # Compute FIRST_2 sets
-    first_sets_k = compute_first_k(grammar_k, k=2)
-    print("FIRST_2 sets:", first_sets_k)
 
-    # Compute FOLLOW_2 sets
-    follow_sets_k = compute_follow_k(grammar_k, first_sets_k, k=2)
-    print("FOLLOW_2 sets:", follow_sets_k)
+        elif choice == "3":
+            # RecursiveParser logic
+            input_string = input("Enter the string for Recursive Descent Parsing: ")
+            # Create an instance of the RecursiveDescentParserWithAST class
+            parser_instance = RecursiveDescentParserWithAST(input_string)
+            # Call the parse method or other necessary methods
+            success, ast = parser_instance.parse()
 
-    # Build Parsing Table for LL(2)
-    parsing_table_k = build_parsing_table_k(grammar_k, first_sets_k, follow_sets_k, k=2)
-    print("Parsing Table LL(2):", parsing_table_k)
+            if success:
+                print("Parsing succeeded.")
+                pos = nx.spring_layout(ast)
+                labels = {node: ast.nodes[node]['label'] for node in ast.nodes()}
+                nx.draw(ast, pos, labels=labels, with_labels=True, node_size=3000, node_color="skyblue", font_size=15)
+                plt.show()
 
-    print("\n=== RECURSIVE DESCENT PARSER ===")
+            else:
+                print("Parsing failed.")
 
-    # Grammar is implicit in the RecursiveDescentParserWithAST implementation
-    print("Grammar is for simple arithmetic expressions: E -> T + E | T - E | T, T -> F * T | F / T | F, F -> (E) | id")
+        elif choice == "4":
+            print("Exiting...")
+            break
+            
+        else:
+            print("Invalid option. Please try again.")
 
-    # Recursive Descent Parsing
-    # В функции main после Recursive Descent Parsing
-    parser = RecursiveDescentParserWithAST(input_string)
-    success, ast = parser.parse()
-    print(f"Recursive Descent Parsing of '{input_string}': {'Success' if success else 'Failure'}")
-
-    # Добавим визуализацию дерева разбора в случае успеха
-    if success:
-        pos = nx.spring_layout(ast)
-        labels = {node: ast.nodes[node]['label'] for node in ast.nodes()}
-        nx.draw(ast, pos, labels=labels, with_labels=True, node_size=3000, node_color="skyblue", font_size=15)
-        plt.show()
-
-    return success
 
 main()
