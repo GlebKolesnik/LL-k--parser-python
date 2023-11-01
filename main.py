@@ -2,6 +2,7 @@ import networkx as nx
 import matplotlib.pyplot as plt
 from lalr_parser import lexer, parser
 from typing import List, Dict, Tuple, Set
+import lalr_parser
 
 
 
@@ -535,7 +536,7 @@ class RecursiveDescentParserWithAST:
 
 def user_input_prompt():
     """Prompt the user for input and return the selected option."""
-    options = ["1) LL(1)", "2) LL(k)", "3) RecursiveParser", "4) Exit"]
+    options = ["1) LL(1)", "2) LL(k)", "3) RecursiveParser", "4) LALR Parser", "5) Exit"]
     print("\n".join(options))
     choice = input("Select an option: ")
     return choice
@@ -574,29 +575,6 @@ def main():
 
             # Here you would visualize the AST or print the parsing results as required
             print(f"String is parsed: {is_parsed}")
-
-
-
-
-        # elif choice == "2":
-        #     # LL(k) analyzer
-        #     try:
-        #         input_string = input("Enter the string for LL(k) analysis: ")
-        #         grammar_text_k = """
-        #         S -> aaBcc
-        #         B -> bB | ε
-        #         """
-        #         k = 2
-        #         grammar_k = parse_grammar_from_text_k(grammar_text_k)
-        #         epsilon_producers_k = find_epsilon_producing_non_terminals_k(grammar_k)
-        #         first_k = compute_first_k(grammar_k, k)
-        #         follow_k = compute_follow_k(grammar_k, first_k, k)
-        #         parsing_table_k = build_parsing_table_k(grammar_k, first_k, follow_k, k)
-        #         is_parsed = llk_parse(input_string, grammar_k, parsing_table_k, k)
-        #         print(f"String is parsed: {is_parsed}")
-        #
-        #     except Exception as e:
-        #         print(f"Error occurred: {e}")
 
         elif choice == "2":
             # LL(k) analyzer
@@ -637,10 +615,18 @@ def main():
             else:
                 print("Parsing failed.")
 
+
         elif choice == "4":
+
+            # LALR parser
+            input_string = input("Enter the string for LALR analysis: ")
+            result = lalr_parser.parser.parse(input_string)
+            print("Parsed result:", result)
+
+        elif choice == "5":
             print("Exiting...")
             break
-            
+
         else:
             print("Invalid option. Please try again.")
 
